@@ -39,9 +39,6 @@ namespace Squirrel
                 var pkgPath = Path.Combine(rootAppDirectory, "packages", latest.Filename);
                 var zp = new ZipPackage(pkgPath);
                     
-                var targetPng = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
-                var targetIco = Path.Combine(rootAppDirectory, "app.ico");
-
                 // NB: Sometimes the Uninstall key doesn't exist
                 using (var parentKey =
                     RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default)
@@ -49,31 +46,6 @@ namespace Squirrel
 
                 var key = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default)
                     .CreateSubKey(uninstallRegSubKey + "\\" + applicationName, RegistryKeyPermissionCheck.ReadWriteSubTree);
-
-                if (zp.IconUrl != null && !File.Exists(targetIco)) {
-                    try {
-                        using (var wc = Utility.CreateWebClient()) { 
-                            await wc.DownloadFileTaskAsync(zp.IconUrl, targetPng);
-                            using (var fs = new FileStream(targetIco, FileMode.Create)) {
-                                if (zp.IconUrl.AbsolutePath.EndsWith("ico")) {
-                                    var bytes = File.ReadAllBytes(targetPng);
-                                    fs.Write(bytes, 0, bytes.Length);
-                                } else {
-                                    using (var bmp = (Bitmap)Image.FromFile(targetPng))
-                                    using (var ico = Icon.FromHandle(bmp.GetHicon())) {
-                                        ico.Save(fs);
-                                    }
-                                }
-
-                                key.SetValue("DisplayIcon", targetIco, RegistryValueKind.String);
-                            }
-                        }
-                    } catch(Exception ex) {
-                        this.Log().InfoException("Couldn't write uninstall icon, don't care", ex);
-                    } finally {
-                        File.Delete(targetPng);
-                    }
-                }
 
                 var stringsToWrite = new[] {
                     new { Key = "DisplayName", Value = zp.Title ?? zp.Description ?? zp.Summary },
@@ -83,7 +55,8 @@ namespace Squirrel
                     new { Key = "Publisher", Value = String.Join(",", zp.Authors) },
                     new { Key = "QuietUninstallString", Value = String.Format("{0} {1}", uninstallCmd, quietSwitch) },
                     new { Key = "UninstallString", Value = uninstallCmd },
-                    new { Key = "URLUpdateInfo", Value = zp.ProjectUrl != null ? zp.ProjectUrl.ToString() : "", }
+                    new { Key = "URLUpdateInfo", Value = zp.ProjectUrl != null ? zp.ProjectUrl.ToString() : "", },
+                    new { Key = "DisplayIcon", Value = Path.Combine(rootAppDirectory, "Update.exe").ToString() + ",0" }
                 };
 
                 var dwordsToWrite = new[] {

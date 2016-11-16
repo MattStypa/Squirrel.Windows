@@ -96,6 +96,7 @@ namespace Squirrel.Update
                 string shortcutArgs = default(string);
                 bool shouldWait = false;
                 bool noMsi = (Environment.OSVersion.Platform != PlatformID.Win32NT);        // NB: WiX doesn't work under Mono / Wine
+                string governorPath = default(string);
 
                 opts = new OptionSet() {
                     "Usage: Squirrel.exe command [OPTS]",
@@ -128,6 +129,7 @@ namespace Squirrel.Update
                     { "a=|process-start-args=", "Arguments that will be used when starting executable", v => processStartArgs = v, true},
                     { "l=|shortcut-locations=", "Comma-separated string of shortcut locations, e.g. 'Desktop,StartMenu'", v => shortcutArgs = v},
                     { "no-msi", "Don't generate an MSI package", v => noMsi = true},
+                    { "governor=", "Path to governor DLL", v => governorPath = v},
                 };
 
                 opts.Parse(args);
@@ -144,12 +146,18 @@ namespace Squirrel.Update
                 switch (updateAction) {
 #if !MONO
                 case UpdateAction.Install:
+                    var governorController = new GovernorController(silentInstall);
                     var progressSource = new ProgressSource();
-                    if (!silentInstall) { 
+
+                    if (!governorController.Before()) {
+                        break;
+                    }
+
+                    if (!silentInstall) {
                         AnimatedGifWindow.ShowWindow(TimeSpan.FromSeconds(4), animatedGifWindowToken.Token, progressSource);
                     }
 
-                    Install(silentInstall, progressSource, Path.GetFullPath(target)).Wait();
+                    Install(silentInstall, progressSource, governorController, Path.GetFullPath(target)).Wait();
                     animatedGifWindowToken.Cancel();
                     break;
                 case UpdateAction.Uninstall:
@@ -178,7 +186,7 @@ namespace Squirrel.Update
                     break;
 #endif
                 case UpdateAction.Releasify:
-                    Releasify(target, releaseDir, packagesDir, bootstrapperExe, backgroundGif, signingParameters, baseUrl, setupIcon, !noMsi);
+                    Releasify(target, releaseDir, packagesDir, bootstrapperExe, backgroundGif, signingParameters, baseUrl, setupIcon, !noMsi, governorPath);
                     break;
                 }
             }
@@ -186,7 +194,7 @@ namespace Squirrel.Update
             return 0;
         }
 
-        public async Task Install(bool silentInstall, ProgressSource progressSource, string sourceDirectory = null)
+        public async Task Install(bool silentInstall, ProgressSource progressSource, GovernorController governorController, string sourceDirectory = null)
         {
             sourceDirectory = sourceDirectory ?? Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             var releasesPath = Path.Combine(sourceDirectory, "RELEASES");
@@ -226,10 +234,16 @@ namespace Squirrel.Update
                 this.ErrorIfThrows(() => File.Copy(Assembly.GetExecutingAssembly().Location, updateTarget, true),
                     "Failed to copy Update.exe to " + updateTarget);
 
-                await mgr.FullInstall(silentInstall, progressSource.Raise);
+                await mgr.FullInstall(progressSource.Raise);
 
                 await this.ErrorIfThrows(() => mgr.CreateUninstallerRegistryEntry(),
                     "Failed to create uninstaller registry entry");
+
+                governorController.After();
+
+                if (!silentInstall) {
+                    mgr.RunApps();
+                }
             }
         }
 
@@ -337,7 +351,7 @@ namespace Squirrel.Update
             }
         }
 
-        public void Releasify(string package, string targetDir = null, string packagesDir = null, string bootstrapperExe = null, string backgroundGif = null, string signingOpts = null, string baseUrl = null, string setupIcon = null, bool generateMsi = true)
+        public void Releasify(string package, string targetDir = null, string packagesDir = null, string bootstrapperExe = null, string backgroundGif = null, string signingOpts = null, string baseUrl = null, string setupIcon = null, bool generateMsi = true, string governorPath = null)
         {
             if (baseUrl != null) {
                 if (!Utility.IsHttpUrl(baseUrl)) {
@@ -420,7 +434,7 @@ namespace Squirrel.Update
             var newestFullRelease = releaseEntries.MaxBy(x => x.Version).Where(x => !x.IsDelta).First();
 
             File.Copy(bootstrapperExe, targetSetupExe, true);
-            var zipPath = createSetupEmbeddedZip(Path.Combine(di.FullName, newestFullRelease.Filename), di.FullName, backgroundGif, signingOpts).Result;
+            var zipPath = createSetupEmbeddedZip(Path.Combine(di.FullName, newestFullRelease.Filename), di.FullName, backgroundGif, governorPath, signingOpts).Result;
 
             var writeZipToSetup = findExecutable("WriteZipToSetup.exe");
 
@@ -557,7 +571,7 @@ namespace Squirrel.Update
             }
         }
 
-        async Task<string> createSetupEmbeddedZip(string fullPackage, string releasesDir, string backgroundGif, string signingOpts)
+        async Task<string> createSetupEmbeddedZip(string fullPackage, string releasesDir, string backgroundGif, string governorPath, string signingOpts)
         {
             string tempPath;
 
@@ -572,6 +586,12 @@ namespace Squirrel.Update
                     this.ErrorIfThrows(() => {
                         File.Copy(backgroundGif, Path.Combine(tempPath, "background.gif"));
                     }, "Failed to write animated GIF to temp dir: " + tempPath);
+                }
+
+                if (!String.IsNullOrWhiteSpace(governorPath)) {
+                    this.ErrorIfThrows(() => {
+                        File.Copy(governorPath, Path.Combine(tempPath, "governor.dll"));
+                    }, "Failed to write governor to temp dir: " + tempPath);
                 }
 
                 var releases = new[] { ReleaseEntry.GenerateFromFile(fullPackage) };

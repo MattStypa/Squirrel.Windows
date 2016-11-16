@@ -77,6 +77,7 @@
     <Compile Include="..\SolutionAssemblyInfo.cs">
       <Link>Properties\SolutionAssemblyInfo.cs</Link>
     </Compile>
+    <Compile Include="GovernorController.cs" />
     <Compile Include="AnimatedGifWindow.cs" />
     <Compile Include="CopStache.cs" />
     <Compile Include="Mono.Options\Options.cs" />

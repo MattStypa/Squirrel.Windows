@@ -26,6 +26,7 @@ namespace Squirrel
         readonly string applicationName;
         readonly IFileDownloader urlDownloader;
         readonly string updateUrlOrPath;
+        private ApplyReleasesImpl applyReleases;
 
         IDisposable updateLock;
 
@@ -47,6 +48,8 @@ namespace Squirrel
             }
 
             this.rootAppDirectory = Path.Combine(rootDirectory ?? GetLocalAppDataDirectory(), this.applicationName);
+
+            applyReleases = new ApplyReleasesImpl(this.rootAppDirectory);
         }
 
         public async Task<UpdateInfo> CheckForUpdate(bool ignoreDeltaUpdates = false, Action<int> progress = null)
@@ -67,26 +70,28 @@ namespace Squirrel
 
         public async Task<string> ApplyReleases(UpdateInfo updateInfo, Action<int> progress = null)
         {
-            var applyReleases = new ApplyReleasesImpl(rootAppDirectory);
             await acquireUpdateLock();
 
-            return await applyReleases.ApplyReleases(updateInfo, false, false, progress);
+            return await applyReleases.ApplyReleases(updateInfo, false, progress);
         }
 
-        public async Task FullInstall(bool silentInstall = false, Action<int> progress = null)
+        public async Task FullInstall(Action<int> progress = null)
         {
             var updateInfo = await CheckForUpdate();
             await DownloadReleases(updateInfo.ReleasesToApply);
 
-            var applyReleases = new ApplyReleasesImpl(rootAppDirectory);
             await acquireUpdateLock();
 
-            await applyReleases.ApplyReleases(updateInfo, silentInstall, true, progress);
+            await applyReleases.ApplyReleases(updateInfo, true, progress);
+        }
+
+        public void RunApps()
+        {
+            applyReleases.runInstalledApps();
         }
 
         public async Task FullUninstall()
         {
-            var applyReleases = new ApplyReleasesImpl(rootAppDirectory);
             await acquireUpdateLock();
 
             this.KillAllExecutablesBelongingToPackage();
@@ -113,21 +118,18 @@ namespace Squirrel
 
         public void CreateShortcutsForExecutable(string exeName, ShortcutLocation locations, bool updateOnly, string programArguments = null, string icon = null)
         {
-            var installHelpers = new ApplyReleasesImpl(rootAppDirectory);
-            installHelpers.CreateShortcutsForExecutable(exeName, locations, updateOnly, programArguments, icon);
+            applyReleases.CreateShortcutsForExecutable(exeName, locations, updateOnly, programArguments, icon);
         }
 
         public Dictionary<ShortcutLocation, ShellLink> GetShortcutsForExecutable(string exeName, ShortcutLocation locations, string programArguments = null)
         {
-            var installHelpers = new ApplyReleasesImpl(rootAppDirectory);
-            return installHelpers.GetShortcutsForExecutable(exeName, locations, programArguments);
+            return applyReleases.GetShortcutsForExecutable(exeName, locations, programArguments);
         }
 
 
         public void RemoveShortcutsForExecutable(string exeName, ShortcutLocation locations)
         {
-            var installHelpers = new ApplyReleasesImpl(rootAppDirectory);
-            installHelpers.RemoveShortcutsForExecutable(exeName, locations);
+            applyReleases.RemoveShortcutsForExecutable(exeName, locations);
         }
 
         public SemanticVersion CurrentlyInstalledVersion(string executable = null)

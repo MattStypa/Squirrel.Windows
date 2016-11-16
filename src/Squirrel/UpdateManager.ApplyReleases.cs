@@ -23,13 +23,22 @@ namespace Squirrel
         internal class ApplyReleasesImpl : IEnableLogger
         {
             readonly string rootAppDirectory;
+            private List<string> installedApps;
 
             public ApplyReleasesImpl(string rootAppDirectory)
             {
+                installedApps = new List<string>();
                 this.rootAppDirectory = rootAppDirectory;
             }
 
-            public async Task<string> ApplyReleases(UpdateInfo updateInfo, bool silentInstall, bool attemptingFullInstall, Action<int> progress = null)
+            public void runInstalledApps()
+            {
+                installedApps
+                    .Select(exe => new ProcessStartInfo(exe, "--squirrel-firstrun") { WorkingDirectory = Path.GetDirectoryName(exe) })
+                    .ForEach(info => Process.Start(info));
+            }
+
+            public async Task<string> ApplyReleases(UpdateInfo updateInfo, bool attemptingFullInstall, Action<int> progress = null)
             {
                 progress = progress ?? (_ => { });
 
@@ -39,7 +48,8 @@ namespace Squirrel
                 if (release == null) {
                     if (attemptingFullInstall) {
                         this.Log().Info("No release to install, running the app");
-                        await invokePostInstall(updateInfo.CurrentlyInstalledVersion.Version, false, true, silentInstall);
+                        await invokePostInstall(updateInfo.CurrentlyInstalledVersion.Version, false, true);
+
                     }
 
                     progress(100);
@@ -57,7 +67,7 @@ namespace Squirrel
                 var newVersion = currentReleases.MaxBy(x => x.Version).First().Version;
                 executeSelfUpdate(newVersion);
 
-                await this.ErrorIfThrows(() => invokePostInstall(newVersion, attemptingFullInstall, false, silentInstall),
+                await this.ErrorIfThrows(() => invokePostInstall(newVersion, attemptingFullInstall, false),
                     "Failed to invoke post-install");
                 progress(75);
 
@@ -361,7 +371,7 @@ namespace Squirrel
                     File.Copy(newSquirrel, Path.Combine(targetDir.Parent.FullName, "Update.exe"), true));
             }
 
-            async Task invokePostInstall(SemanticVersion currentVersion, bool isInitialInstall, bool firstRunOnly, bool silentInstall)
+            async Task invokePostInstall(SemanticVersion currentVersion, bool isInitialInstall, bool firstRunOnly)
             {
                 var targetDir = getDirectoryForRelease(currentVersion);
                 var args = isInitialInstall ?
@@ -401,12 +411,7 @@ namespace Squirrel
                     squirrelApps.ForEach(x => CreateShortcutsForExecutable(Path.GetFileName(x), ShortcutLocation.Desktop | ShortcutLocation.StartMenu, isInitialInstall == false, null, null));
                 }
 
-                if (!isInitialInstall || silentInstall) return;
-
-                var firstRunParam = isInitialInstall ? "--squirrel-firstrun" : "";
-                squirrelApps
-                    .Select(exe => new ProcessStartInfo(exe, firstRunParam) { WorkingDirectory = Path.GetDirectoryName(exe) })
-                    .ForEach(info => Process.Start(info));
+                installedApps = squirrelApps;
             }
 
             void fixPinnedExecutables(SemanticVersion newCurrentVersion, bool removeAll = false)

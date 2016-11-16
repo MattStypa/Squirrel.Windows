@@ -242,7 +242,7 @@ namespace Squirrel.Tests
 
                 var progress = new List<int>();
 
-                await fixture.ApplyReleases(updateInfo, false, false, progress.Add);
+                await fixture.ApplyReleases(updateInfo, false, progress.Add);
                 this.Log().Info("Progress: [{0}]", String.Join(",", progress));
 
                 progress
@@ -290,7 +290,7 @@ namespace Squirrel.Tests
                 updateInfo.ReleasesToApply.Contains(latestFullEntry).ShouldBeTrue();
 
                 var progress = new List<int>();
-                await fixture.ApplyReleases(updateInfo, false, false, progress.Add);
+                await fixture.ApplyReleases(updateInfo, false, progress.Add);
                 this.Log().Info("Progress: [{0}]", String.Join(",", progress));
 
                 progress
@@ -339,7 +339,7 @@ namespace Squirrel.Tests
                 updateInfo.ReleasesToApply.Contains(latestFullEntry).ShouldBeTrue();
 
                 var progress = new List<int>();
-                await fixture.ApplyReleases(updateInfo, false, false, progress.Add);
+                await fixture.ApplyReleases(updateInfo, false, progress.Add);
                 this.Log().Info("Progress: [{0}]", String.Join(",", progress));
 
                 progress
@@ -392,7 +392,7 @@ namespace Squirrel.Tests
 
                 var progress = new List<int>();
 
-                await fixture.ApplyReleases(updateInfo, false, false, progress.Add);
+                await fixture.ApplyReleases(updateInfo, false, progress.Add);
                 this.Log().Info("Progress: [{0}]", String.Join(",", progress));
 
                 progress
