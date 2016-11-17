@@ -434,7 +434,7 @@ namespace Squirrel.Update
             var newestFullRelease = releaseEntries.MaxBy(x => x.Version).Where(x => !x.IsDelta).First();
 
             File.Copy(bootstrapperExe, targetSetupExe, true);
-            var zipPath = createSetupEmbeddedZip(Path.Combine(di.FullName, newestFullRelease.Filename), di.FullName, backgroundGif, governorPath, signingOpts).Result;
+            var zipPath = createSetupEmbeddedZip(Path.Combine(di.FullName, newestFullRelease.Filename), di.FullName, backgroundGif, governorPath, signingOpts, new ZipPackage(package), setupIcon).Result;
 
             var writeZipToSetup = findExecutable("WriteZipToSetup.exe");
 
@@ -571,7 +571,7 @@ namespace Squirrel.Update
             }
         }
 
-        async Task<string> createSetupEmbeddedZip(string fullPackage, string releasesDir, string backgroundGif, string governorPath, string signingOpts)
+        async Task<string> createSetupEmbeddedZip(string fullPackage, string releasesDir, string backgroundGif, string governorPath, string signingOpts, IPackage package, string iconPath = null)
         {
             string tempPath;
 
@@ -581,6 +581,9 @@ namespace Squirrel.Update
                     File.Copy(Assembly.GetEntryAssembly().Location.Replace("-Mono.exe", ".exe"), Path.Combine(tempPath, "Update.exe"));
                     File.Copy(fullPackage, Path.Combine(tempPath, Path.GetFileName(fullPackage)));
                 }, "Failed to write package files to temp dir: " + tempPath);
+
+                Utility.Retry(() =>
+                    setPEVersionInfoAndIcon(Path.Combine(tempPath, "Update.exe"), package, iconPath).Wait());
 
                 if (!String.IsNullOrWhiteSpace(backgroundGif)) {
                     this.ErrorIfThrows(() => {
